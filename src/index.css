@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* -------------------------------------------------------------
+   OFFICIAL INSTITUTIONAL PRINT STYLESHEET
+   Ensures clean, paper-ready output without UI chrome or dark overlays
+   ------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 15mm 12mm;
+  }
+
+  /* Reset body canvas for crisp ink printing */
+  html, body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10.5pt !important;
+    line-height: 1.4 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide navigation, sidebars, headers, action buttons, toolbars */
+  header,
+  nav,
+  aside,
+  #app-header,
+  #app-sidebar,
+  #sidebar-navigation,
+  .print\:hidden,
+  [data-print-hidden="true"],
+  button:not(.printable-document button),
+  .no-print,
+  .floating-controls,
+  .toast,
+  .backdrop-blur-md,
+  .backdrop-blur-xs,
+  .fixed.top-4 {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  /* Reset modal overlays so they don't darken the paper */
+  .fixed.inset-0,
+  .bg-slate-950\/80,
+  .bg-slate-900\/60 {
+    position: static !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Expand the printable document card across full page */
+  .printable-document,
+  [data-printable="true"],
+  .print\:border-none {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* Tables and typography adjustments */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+    font-size: 9.5pt !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  th, td {
+    padding: 4px 6px !important;
+    border: 1px solid #94a3b8 !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+  }
+
+  /* Ensure text colors are high-contrast black/slate on white */
+  .text-white {
+    color: #0f172a !important;
+  }
+
+  .bg-slate-900,
+  .bg-indigo-900,
+  .bg-purple-900 {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  /* Hide scrollbars */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+}

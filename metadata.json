@@ -1,0 +1,6 @@
+{
+  "name": "Students Performance Portal",
+  "description": "Student Performance and Academic Management Portal with dynamic user credentials, student OD / leave application and staff approval workflow.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
