@@ -340,7 +340,7 @@ class InstitutionalRepository {
 
       // 4. Attendance
       try {
-        const [attRows]: any = await pool.query('SELECT * FROM attendance ORDER BY date DESC, id DESC LIMIT 500');
+        const [attRows]: any = await pool.query('SELECT * FROM attendance_records ORDER BY date DESC, id DESC LIMIT 500');
         if (Array.isArray(attRows) && attRows.length > 0) {
           this.attendance = attRows.map((r: any) => ({
             id: r.id,
