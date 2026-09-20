@@ -868,6 +868,16 @@ export async function syncAttendanceToTiDb(records: AttendanceRecord[]): Promise
   }
 }
 
+export async function deleteAttendanceFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM attendance_records WHERE id = ?`, [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteAttendanceFromTiDb error:', err.message);
+  }
+}
+
 export async function syncFacultyToTiDb(f: Faculty): Promise<void> {
   const pool = getMySqlPool();
   if (!pool) return;

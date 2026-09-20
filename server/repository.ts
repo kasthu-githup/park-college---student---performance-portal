@@ -34,6 +34,7 @@ import {
   syncStudentToTiDb,
   deleteStudentFromTiDb,
   syncAttendanceToTiDb,
+  deleteAttendanceFromTiDb,
   syncFacultyToTiDb,
   deleteFacultyFromTiDb,
   syncHodToTiDb,
@@ -547,6 +548,16 @@ class InstitutionalRepository {
     }
     this.saveToDisk();
     await syncAttendanceToTiDb(records);
+  }
+
+  public async deleteAttendanceRecord(id: string): Promise<void> {
+    const rec = this.attendance.find((a) => a.id === id);
+    this.attendance = this.attendance.filter((a) => a.id !== id);
+    if (rec) {
+      this.recalculateStudentAttendance(rec.regNo);
+    }
+    this.saveToDisk();
+    await deleteAttendanceFromTiDb(id);
   }
 
   // Mutator: Faculty

@@ -99,7 +99,13 @@ interface PortalContextType {
   deleteStudent: (regNo: string) => void;
   addMentorMeetingNote: (note: Omit<MentorMeetingNote, 'id'>) => void;
   // Leave requests
-  submitLeaveRequest: (reqData: Omit<LeaveRequest, 'id' | 'status' | 'appliedOn'>) => void;
+  submitLeaveRequest: (
+    reqData: Omit<LeaveRequest, 'id' | 'status' | 'appliedOn'> & {
+      status?: 'Pending' | 'Approved';
+      reviewedBy?: string;
+      reviewerComments?: string;
+    }
+  ) => void;
   reviewLeaveRequest: (id: string, status: 'Approved' | 'Rejected', comments?: string) => void;
   // Announcements
   createAnnouncement: (ann: Omit<Announcement, 'id' | 'date'>) => void;
@@ -1472,22 +1478,81 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Leave Requests Operations
-  const submitLeaveRequest = (reqData: Omit<LeaveRequest, 'id' | 'status' | 'appliedOn'>) => {
+  const submitLeaveRequest = (
+    reqData: Omit<LeaveRequest, 'id' | 'status' | 'appliedOn'> & {
+      status?: 'Pending' | 'Approved';
+      reviewedBy?: string;
+      reviewerComments?: string;
+    }
+  ) => {
+    const isDirectApproved = reqData.status === 'Approved';
+    const reviewer = reqData.reviewedBy || (currentUser?.data as any)?.name || 'Faculty Advisor';
+    const today = new Date().toISOString().split('T')[0];
+    const newReqId = `lr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
     const newReq: LeaveRequest = {
       ...reqData,
-      id: `lr-${Date.now()}`,
-      status: 'Pending',
-      appliedOn: new Date().toISOString().split('T')[0],
+      id: newReqId,
+      status: isDirectApproved ? 'Approved' : 'Pending',
+      appliedOn: today,
+      reviewedBy: isDirectApproved ? reviewer : undefined,
+      reviewedOn: isDirectApproved ? today : undefined,
+      reviewerComments: isDirectApproved ? (reqData.reviewerComments || 'Direct On-Duty authorized and approved by Faculty.') : undefined,
     };
     setLeaveRequests((prev) => [newReq, ...prev]);
 
-    // Add notification for faculty
+    const isOD = newReq.type.includes('OD') || newReq.type.includes('On-Duty') || newReq.type.includes('Symposium');
+
+    // If direct approved and OD, immediately credit student attendance & add attendance record
+    if (isDirectApproved && isOD) {
+      const days = newReq.daysCount || 1;
+      setStudents((prev) =>
+        prev.map((s) => {
+          if (s.regNo.toUpperCase() !== newReq.studentRegNo.toUpperCase()) return s;
+          const currentOd = s.overallAttendance.od || 0;
+          const newOd = currentOd + days;
+          const present = s.overallAttendance.present || 0;
+          const absent = s.overallAttendance.absent || 0;
+          const total = s.overallAttendance.total || (present + absent + newOd);
+          const effectiveAttended = present + newOd;
+          const newPercentage = total > 0 ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10) : 100;
+          return {
+            ...s,
+            overallAttendance: {
+              ...s.overallAttendance,
+              od: newOd,
+              percentage: newPercentage,
+            },
+          };
+        })
+      );
+
+      const odRec: AttendanceRecord = {
+        id: `att-od-${newReq.id}`,
+        date: newReq.startDate,
+        regNo: newReq.studentRegNo,
+        studentName: newReq.studentName,
+        subjectCode: 'OD-DUTY',
+        subjectName: newReq.reason || 'Authorized On-Duty Event',
+        section: newReq.section,
+        year: newReq.year,
+        status: 'OD',
+        markedBy: reviewer,
+        period: 1,
+      };
+      setAttendanceRecords((prev) => [odRec, ...prev]);
+    }
+
+    // Add notification
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
-      targetRole: 'faculty',
-      title: 'New Leave Request Received',
-      message: `${reqData.studentName} has submitted a ${reqData.type} request for ${reqData.daysCount} day(s).`,
-      type: 'info',
+      targetRole: isDirectApproved ? 'student' : 'faculty',
+      targetUserId: isDirectApproved ? newReq.studentRegNo : undefined,
+      title: isDirectApproved ? `On-Duty Granted: ${newReq.type}` : 'New Leave Request Received',
+      message: isDirectApproved
+        ? `On-Duty for ${newReq.daysCount} day(s) (${newReq.startDate} to ${newReq.endDate}) granted by ${reviewer}. Attendance credited.`
+        : `${reqData.studentName} has submitted a ${reqData.type} request for ${reqData.daysCount} day(s).`,
+      type: isDirectApproved ? 'success' : 'info',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       read: false,
       link: 'leave',
@@ -1495,20 +1560,26 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setNotifications((prev) => [notif, ...prev]);
 
     addAuditLogEntry(
-      'LEAVE_REQUEST_SUBMITTED',
-      `Student ${reqData.studentName} (${reqData.studentRegNo}) applied for ${reqData.type}`
+      isDirectApproved ? 'OD_DIRECT_GRANTED' : 'LEAVE_REQUEST_SUBMITTED',
+      `${isDirectApproved ? 'Direct OD granted' : 'Leave requested'} for ${reqData.studentName} (${reqData.studentRegNo})`
     );
 
-    // Also notify backend API in background
+    // Sync to backend API with proper auth headers
     fetch('/api/leave-requests', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify(newReq),
-    }).catch(() => {});
+    })
+      .then(() => refreshDbStatus())
+      .catch((err) => console.warn('Leave request submit sync warning:', err));
   };
 
   const reviewLeaveRequest = (id: string, status: 'Approved' | 'Rejected', comments?: string) => {
     const reviewerName = currentUser ? (currentUser.data as any).name : 'Faculty Mentor';
+    const today = new Date().toISOString().split('T')[0];
+
+    const targetReq = leaveRequests.find((l) => l.id === id);
+    const prevStatus = targetReq?.status;
 
     setLeaveRequests((prev) =>
       prev.map((item) => {
@@ -1517,77 +1588,136 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ...item,
           status,
           reviewedBy: reviewerName,
-          reviewedOn: new Date().toISOString().split('T')[0],
-          reviewerComments: comments || (status === 'Approved' ? 'Recommended and approved.' : 'Request declined.'),
+          reviewedOn: today,
+          reviewerComments: comments || (status === 'Approved' ? 'Recommended and approved. OD attendance credited.' : 'Request declined.'),
         };
       })
     );
 
-    const targetReq = leaveRequests.find((l) => l.id === id);
     if (targetReq) {
-      // Credit attendance if OD is approved
-      if (
-        status === 'Approved' &&
-        (targetReq.type.includes('OD') ||
-          targetReq.type.includes('On-Duty') ||
-          targetReq.type.includes('Symposium'))
-      ) {
-        const days = targetReq.daysCount || 1;
-        setStudents((prev) =>
-          prev.map((s) => {
-            if (s.regNo !== targetReq.studentRegNo) return s;
-            const currentOd = s.overallAttendance.od || 0;
-            const newOd = currentOd + days;
-            const present = s.overallAttendance.present || 0;
-            const total =
-              s.overallAttendance.total ||
-              present + (s.overallAttendance.absent || 0) + newOd;
-            const effectiveAttended = present + newOd;
-            const newPercentage =
-              total > 0
-                ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10)
-                : 100;
-            const updatedStudent: Student = {
-              ...s,
-              overallAttendance: {
-                ...s.overallAttendance,
-                od: newOd,
-                percentage: newPercentage,
-              },
-            };
-            return updatedStudent;
-          })
-        );
+      const isOD =
+        targetReq.type.includes('OD') ||
+        targetReq.type.includes('On-Duty') ||
+        targetReq.type.includes('Symposium');
 
-        // If currently logged in as this student, update session data
-        setCurrentUser((current) => {
-          if (current && current.role === 'student' && current.data.regNo === targetReq.studentRegNo) {
-            const stu = current.data as Student;
-            const currentOd = stu.overallAttendance.od || 0;
-            const newOd = currentOd + days;
-            const present = stu.overallAttendance.present || 0;
-            const total =
-              stu.overallAttendance.total ||
-              present + (stu.overallAttendance.absent || 0) + newOd;
-            const effectiveAttended = present + newOd;
-            const newPercentage =
-              total > 0
-                ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10)
-                : 100;
-            return {
-              ...current,
-              data: {
-                ...stu,
+      if (isOD) {
+        const days = targetReq.daysCount || 1;
+
+        if (status === 'Approved' && prevStatus !== 'Approved') {
+          // Increment OD and update student attendance
+          setStudents((prev) =>
+            prev.map((s) => {
+              if (s.regNo.toUpperCase() !== targetReq.studentRegNo.toUpperCase()) return s;
+              const currentOd = s.overallAttendance.od || 0;
+              const newOd = currentOd + days;
+              const present = s.overallAttendance.present || 0;
+              const absent = s.overallAttendance.absent || 0;
+              const total = s.overallAttendance.total || (present + absent + newOd);
+              const effectiveAttended = present + newOd;
+              const newPercentage = total > 0 ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10) : 100;
+              return {
+                ...s,
                 overallAttendance: {
-                  ...stu.overallAttendance,
+                  ...s.overallAttendance,
                   od: newOd,
                   percentage: newPercentage,
                 },
-              },
-            };
-          }
-          return current;
-        });
+              };
+            })
+          );
+
+          // If currently logged in as this student, update session data
+          setCurrentUser((current) => {
+            if (current && current.role === 'student' && current.data.regNo === targetReq.studentRegNo) {
+              const stu = current.data as Student;
+              const currentOd = stu.overallAttendance.od || 0;
+              const newOd = currentOd + days;
+              const present = stu.overallAttendance.present || 0;
+              const absent = stu.overallAttendance.absent || 0;
+              const total = stu.overallAttendance.total || (present + absent + newOd);
+              const effectiveAttended = present + newOd;
+              const newPercentage = total > 0 ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10) : 100;
+              return {
+                ...current,
+                data: {
+                  ...stu,
+                  overallAttendance: {
+                    ...stu.overallAttendance,
+                    od: newOd,
+                    percentage: newPercentage,
+                  },
+                },
+              };
+            }
+            return current;
+          });
+
+          // Add AttendanceRecord with status: 'OD'
+          const odRec: AttendanceRecord = {
+            id: `att-od-${targetReq.id}`,
+            date: targetReq.startDate,
+            regNo: targetReq.studentRegNo,
+            studentName: targetReq.studentName,
+            subjectCode: 'OD-DUTY',
+            subjectName: targetReq.reason || 'Authorized On-Duty Event',
+            section: targetReq.section,
+            year: targetReq.year,
+            status: 'OD',
+            markedBy: reviewerName,
+            period: 1,
+          };
+          setAttendanceRecords((prev) => [odRec, ...prev.filter((a) => a.id !== `att-od-${targetReq.id}`)]);
+        } else if (status === 'Rejected' && prevStatus === 'Approved') {
+          // Rollback OD if revoked
+          setStudents((prev) =>
+            prev.map((s) => {
+              if (s.regNo.toUpperCase() !== targetReq.studentRegNo.toUpperCase()) return s;
+              const currentOd = s.overallAttendance.od || 0;
+              const newOd = Math.max(0, currentOd - days);
+              const present = s.overallAttendance.present || 0;
+              const absent = s.overallAttendance.absent || 0;
+              const total = s.overallAttendance.total || (present + absent + newOd);
+              const effectiveAttended = present + newOd;
+              const newPercentage = total > 0 ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10) : 100;
+              return {
+                ...s,
+                overallAttendance: {
+                  ...s.overallAttendance,
+                  od: newOd,
+                  percentage: newPercentage,
+                },
+              };
+            })
+          );
+
+          setCurrentUser((current) => {
+            if (current && current.role === 'student' && current.data.regNo === targetReq.studentRegNo) {
+              const stu = current.data as Student;
+              const currentOd = stu.overallAttendance.od || 0;
+              const newOd = Math.max(0, currentOd - days);
+              const present = stu.overallAttendance.present || 0;
+              const absent = stu.overallAttendance.absent || 0;
+              const total = stu.overallAttendance.total || (present + absent + newOd);
+              const effectiveAttended = present + newOd;
+              const newPercentage = total > 0 ? Math.min(100, Math.round((effectiveAttended / total) * 1000) / 10) : 100;
+              return {
+                ...current,
+                data: {
+                  ...stu,
+                  overallAttendance: {
+                    ...stu.overallAttendance,
+                    od: newOd,
+                    percentage: newPercentage,
+                  },
+                },
+              };
+            }
+            return current;
+          });
+
+          // Remove the OD attendance record
+          setAttendanceRecords((prev) => prev.filter((a) => a.id !== `att-od-${targetReq.id}`));
+        }
       }
 
       // Notify student
@@ -1596,7 +1726,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         targetRole: 'student',
         targetUserId: targetReq.studentRegNo,
         title: `Leave Request ${status}`,
-        message: `Your ${targetReq.type} request from ${targetReq.startDate} has been ${status.toLowerCase()} by ${reviewerName}.`,
+        message: `Your ${targetReq.type} request from ${targetReq.startDate} has been ${status.toLowerCase()} by ${reviewerName}.${status === 'Approved' && isOD ? ' OD attendance credited.' : ''}`,
         type: status === 'Approved' ? 'success' : 'warning',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         read: false,
@@ -1610,12 +1740,14 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       );
     }
 
-    // Backend sync
-    fetch(`/api/leave-requests/${id}/review`, {
+    // Backend sync with auth headers
+    fetch(`/api/leave-requests/${encodeURIComponent(id)}/review`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: JSON.stringify({ status, reviewerName, comments }),
-    }).catch(() => {});
+    })
+      .then(() => refreshDbStatus())
+      .catch((err) => console.warn('Review leave request sync warning:', err));
   };
 
   // Announcements Operations

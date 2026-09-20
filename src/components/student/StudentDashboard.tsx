@@ -39,6 +39,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 }) => {
   const {
     currentUser,
+    students,
     fees,
     announcements,
     leaveRequests,
@@ -54,7 +55,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     else setLocalTab(t);
   };
 
-  const student = currentUser?.data as Student | undefined;
+  const currentStudentData = currentUser?.data as Student | undefined;
+  const student: Student | undefined =
+    students.find((s) => s.regNo === currentStudentData?.regNo) || currentStudentData;
 
   // Print Report State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);

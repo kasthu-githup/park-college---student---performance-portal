@@ -150,14 +150,13 @@ export const LeaveODManagementView: React.FC<LeaveODManagementViewProps> = ({ re
       daysCount: Number(grantDays),
       reason: grantReason,
       type: grantType,
+      status: 'Approved',
+      reviewedBy: reviewerName,
+      reviewerComments: `Direct ${grantType} authorized and granted by ${reviewerRole.toUpperCase()} (${reviewerName}).`,
     });
 
-    // Automatically approve since it was initiated by Staff/HOD
-    setTimeout(() => {
-      // Find the newly added request from latest leaveRequests or via direct notification
-      showToast(`Direct ${grantType} created for ${student.name} (${student.regNo}).`);
-      setIsGrantODModalOpen(false);
-    }, 200);
+    showToast(`Direct ${grantType} approved and attendance credited for ${student.name}.`);
+    setIsGrantODModalOpen(false);
   };
 
   return (
