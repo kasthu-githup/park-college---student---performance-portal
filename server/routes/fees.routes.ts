@@ -86,8 +86,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
 // DELETE /api/fees/:id - Remove fee record
 router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
-  repo.fees = repo.fees.filter((f) => f.id !== id);
-  await repo.saveToDisk();
+  await repo.deleteFee(id);
   res.json({ success: true, message: 'Fee record deleted' });
 });
 

@@ -141,16 +141,14 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req: Authenticat
     return res.status(404).json({ success: false, message: 'Faculty not found' });
   }
 
-  const removed = repo.faculty.splice(idx, 1)[0];
-  repo.saveToDisk();
-  const uIdx = repo.users.findIndex((u) => u.id.toLowerCase() === id.toLowerCase());
-  if (uIdx !== -1) repo.users.splice(uIdx, 1);
+  const removed = repo.faculty.find((f) => f.id.toLowerCase() === id.toLowerCase());
+  await repo.deleteFaculty(id);
 
   repo.logAudit(
     'FACULTY_DELETED',
     req.user!.email,
     'admin',
-    `De-registered faculty ${removed.name} (${removed.id})`,
+    `De-registered faculty ${removed?.name || id} (${id})`,
     req.ip
   );
 

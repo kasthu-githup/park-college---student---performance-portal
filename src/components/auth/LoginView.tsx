@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { usePortal } from '../../context/PortalContext';
 import { UserRole } from '../../types';
+import { DatabaseStatusModal } from '../common/DatabaseStatusModal';
 import {
   GraduationCap,
   UserCheck,
@@ -22,6 +23,7 @@ import {
   Calendar,
   Check,
   RotateCcw,
+  Database,
 } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
@@ -44,6 +46,7 @@ export const LoginView: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [dbModalOpen, setDbModalOpen] = useState(false);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -221,10 +224,16 @@ export const LoginView: React.FC = () => {
 
       {/* Top Controls: Fullscreen & Status */}
       <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20 flex items-center gap-2">
-        <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] font-medium text-slate-300">
-          <span className={`w-2 h-2 rounded-full ${dbStatus?.connected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-          <span>{dbStatus?.connected ? 'DB Connected' : 'Relational DB'}</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setDbModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-200 transition-colors cursor-pointer shadow-sm"
+          title="Configure and connect TiDB Cloud Database"
+        >
+          <Database className="w-3.5 h-3.5 text-indigo-400" />
+          <span className={`w-2 h-2 rounded-full ${dbStatus?.connected ? 'bg-emerald-400 shadow-xs shadow-emerald-400/50' : 'bg-amber-400 animate-pulse'}`} />
+          <span>{dbStatus?.connected ? 'TiDB Connected' : 'Connect TiDB Database'}</span>
+        </button>
         <button
           type="button"
           onClick={toggleFullscreen}
@@ -292,6 +301,26 @@ export const LoginView: React.FC = () => {
                   <div className="text-[11px] text-slate-400">Tailored views for Student, Faculty, HOD & Admin</div>
                 </div>
               </div>
+            </div>
+
+            {/* TiDB Cloud Database Quick Status & Connection Prompt */}
+            <div className="mt-4 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <Database className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <div className="text-[11px]">
+                  <span className="text-slate-400">Database: </span>
+                  <span className={dbStatus?.connected ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                    {dbStatus?.connected ? "TiDB Connected" : "Local Store"}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDbModalOpen(true)}
+                className="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold transition-colors cursor-pointer"
+              >
+                {dbStatus?.connected ? "Status" : "Connect TiDB"}
+              </button>
             </div>
           </div>
 
@@ -815,6 +844,8 @@ export const LoginView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* TiDB Database Configuration Modal */}
+      <DatabaseStatusModal isOpen={dbModalOpen} onClose={() => setDbModalOpen(false)} />
     </div>
   );
 };

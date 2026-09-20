@@ -4,6 +4,8 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { config } from './server/config';
 import { securityHeaders, rateLimiter, errorHandler, requestLogger } from './server/middleware/security';
+import { initTiDbSchema } from './server/db';
+import { repo } from './server/repository';
 
 // Route handlers
 import authRoutes from './server/routes/auth.routes';
@@ -76,6 +78,15 @@ async function startServer() {
   // 6. Bind to 0.0.0.0:3000
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    // Auto-connect to TiDB Cloud and load database
+    initTiDbSchema()
+      .then(async () => {
+        await repo.loadAllFromTiDb();
+        console.log('[TiDB] Direct Cloud Database ready and loaded.');
+      })
+      .catch((err) => {
+        console.warn('[TiDB] Cloud Database initial connection:', err.message);
+      });
   });
 }
 

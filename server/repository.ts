@@ -35,9 +35,20 @@ import {
   deleteStudentFromTiDb,
   syncAttendanceToTiDb,
   syncFacultyToTiDb,
+  deleteFacultyFromTiDb,
   syncHodToTiDb,
   syncFeeToTiDb,
+  deleteFeeFromTiDb,
   syncAnnouncementToTiDb,
+  deleteAnnouncementFromTiDb,
+  syncUserToTiDb,
+  deleteUserFromTiDb,
+  syncLeaveToTiDb,
+  deleteLeaveFromTiDb,
+  syncDepartmentToTiDb,
+  deleteDepartmentFromTiDb,
+  syncSubjectToTiDb,
+  deleteSubjectFromTiDb,
 } from './db';
 
 export interface UserAccount {
@@ -160,65 +171,14 @@ class InstitutionalRepository {
     });
   }
 
-  // Load state from local disk store
+  // Load persistent store: disabled (direct TiDB Cloud mode active)
   public loadFromDisk(): boolean {
-    try {
-      if (fs.existsSync(STORE_PATH)) {
-        const raw = fs.readFileSync(STORE_PATH, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (parsed.students && Array.isArray(parsed.students) && parsed.students.length > 0) {
-          this.students = parsed.students;
-        }
-        if (parsed.faculty && Array.isArray(parsed.faculty)) this.faculty = parsed.faculty;
-        if (parsed.hod) this.hod = parsed.hod;
-        if (parsed.admin) this.admin = parsed.admin;
-        if (parsed.departments && Array.isArray(parsed.departments)) this.departments = parsed.departments;
-        if (parsed.subjects && Array.isArray(parsed.subjects)) this.subjects = parsed.subjects;
-        if (parsed.attendance && Array.isArray(parsed.attendance)) this.attendance = parsed.attendance;
-        if (parsed.leaveRequests && Array.isArray(parsed.leaveRequests)) this.leaveRequests = parsed.leaveRequests;
-        if (parsed.announcements && Array.isArray(parsed.announcements)) this.announcements = parsed.announcements;
-        if (parsed.notifications && Array.isArray(parsed.notifications)) this.notifications = parsed.notifications;
-        if (parsed.fees && Array.isArray(parsed.fees)) this.fees = parsed.fees;
-        if (parsed.auditLogs && Array.isArray(parsed.auditLogs)) this.auditLogs = parsed.auditLogs;
-        if (parsed.settings) this.settings = { ...this.settings, ...parsed.settings };
-        if (parsed.users && Array.isArray(parsed.users)) this.users = parsed.users;
-        console.log(`[Repository] Successfully loaded persistent store from ${STORE_PATH}`);
-        return true;
-      }
-    } catch (err: any) {
-      console.error('[Repository] Failed to load store from disk:', err.message);
-    }
     return false;
   }
 
-  // Save current repository state to local disk store
+  // Save current repository state to local disk store: disabled (direct TiDB Cloud persistence active)
   public saveToDisk(): void {
-    try {
-      const dir = path.dirname(STORE_PATH);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const data = {
-        users: this.users,
-        students: this.students,
-        faculty: this.faculty,
-        hod: this.hod,
-        admin: this.admin,
-        departments: this.departments,
-        subjects: this.subjects,
-        attendance: this.attendance,
-        leaveRequests: this.leaveRequests,
-        announcements: this.announcements,
-        notifications: this.notifications,
-        fees: this.fees,
-        auditLogs: this.auditLogs,
-        settings: this.settings,
-        lastSaved: new Date().toISOString(),
-      };
-      fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (err: any) {
-      console.error('[Repository] Error saving store to disk:', err.message);
-    }
+    // No-op: All operations are executed directly against TiDB Cloud database
   }
 
   // Synchronize all repository items to TiDB database
@@ -230,6 +190,11 @@ class InstitutionalRepository {
 
     try {
       await initTiDbSchema();
+
+      // Sync users
+      for (const u of this.users) {
+        await syncUserToTiDb(u);
+      }
 
       // Sync students
       for (const s of this.students) {
@@ -282,42 +247,268 @@ class InstitutionalRepository {
     if (!pool) return false;
 
     try {
-      const [rows]: any = await pool.query('SELECT * FROM students');
-      if (Array.isArray(rows) && rows.length > 0) {
-        this.students = rows.map((r: any) => ({
-          regNo: r.reg_no,
-          id: r.id,
-          name: r.name,
-          department: r.department,
-          year: r.year,
-          semester: r.semester,
-          section: r.section,
-          email: r.email,
-          phone: r.phone || '',
-          dob: r.dob || '',
-          bloodGroup: r.blood_group || 'O+',
-          facultyAdvisor: r.faculty_advisor || '',
-          mentor: r.mentor || '',
-          parentName: r.parent_name || '',
-          parentPhone: r.parent_phone || '',
-          address: r.address || '',
-          cgpa: Number(r.cgpa) || 0,
-          currentSemesterGpa: Number(r.current_semester_gpa) || 0,
-          subjects: typeof r.subjects === 'string' ? JSON.parse(r.subjects) : r.subjects || [],
-          marks: typeof r.marks === 'string' ? JSON.parse(r.marks) : r.marks || {},
-          assignments: typeof r.assignments === 'string' ? JSON.parse(r.assignments) : r.assignments || [],
-          overallAttendance: typeof r.overall_attendance === 'string' ? JSON.parse(r.overall_attendance) : r.overall_attendance || {},
-          subjectAttendance: typeof r.subject_attendance === 'string' ? JSON.parse(r.subject_attendance) : r.subject_attendance || [],
-          performanceRating: r.performance_rating || 'Good',
-          facultyRemarks: r.faculty_remarks || '',
-          mentorNotes: typeof r.mentor_notes === 'string' ? JSON.parse(r.mentor_notes) : r.mentor_notes || [],
-          avatar: r.avatar || '',
-          accountStatus: r.account_status || 'Active',
-        }));
-        this.saveToDisk();
-        console.log(`[Repository] Loaded ${this.students.length} students from TiDB Cloud`);
-        return true;
+      // 1. Students
+      try {
+        const [rows]: any = await pool.query('SELECT * FROM students');
+        if (Array.isArray(rows) && rows.length > 0) {
+          this.students = rows.map((r: any) => ({
+            regNo: r.reg_no,
+            id: r.id || r.reg_no,
+            name: r.name,
+            department: r.department,
+            year: r.year,
+            semester: r.semester,
+            section: r.section,
+            email: r.email,
+            phone: r.phone || '',
+            dob: r.dob || '',
+            bloodGroup: r.blood_group || 'O+',
+            facultyAdvisor: r.faculty_advisor || '',
+            mentor: r.mentor || '',
+            parentName: r.parent_name || '',
+            parentPhone: r.parent_phone || '',
+            address: r.address || '',
+            cgpa: Number(r.cgpa) || 0,
+            currentSemesterGpa: Number(r.current_semester_gpa) || 0,
+            subjects: typeof r.subjects === 'string' ? JSON.parse(r.subjects) : r.subjects || [],
+            marks: typeof r.marks === 'string' ? JSON.parse(r.marks) : r.marks || {},
+            assignments: typeof r.assignments === 'string' ? JSON.parse(r.assignments) : r.assignments || [],
+            overallAttendance: typeof r.overall_attendance === 'string' ? JSON.parse(r.overall_attendance) : r.overall_attendance || {},
+            subjectAttendance: typeof r.subject_attendance === 'string' ? JSON.parse(r.subject_attendance) : r.subject_attendance || [],
+            performanceRating: r.performance_rating || 'Good',
+            facultyRemarks: r.faculty_remarks || '',
+            mentorNotes: typeof r.mentor_notes === 'string' ? JSON.parse(r.mentor_notes) : r.mentor_notes || [],
+            avatar: r.avatar || '',
+            accountStatus: r.account_status || 'Active',
+          }));
+          console.log(`[Repository] Loaded ${this.students.length} students from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Students load error:', e.message);
       }
+
+      // 2. Faculty
+      try {
+        const [fRows]: any = await pool.query('SELECT * FROM faculty');
+        if (Array.isArray(fRows) && fRows.length > 0) {
+          this.faculty = fRows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            designation: r.designation,
+            department: r.department,
+            email: r.email,
+            phone: r.phone || '',
+            cabin: r.cabin || '',
+            qualification: r.qualification || '',
+            officeHours: r.office_hours || '',
+            specialization: r.specialization || '',
+            bio: r.bio || '',
+            assignedMenteeSection: r.assigned_mentee_section || 'A',
+            assignedClasses: typeof r.assigned_classes === 'string' ? JSON.parse(r.assigned_classes) : r.assigned_classes || [],
+            accountStatus: r.account_status || 'Active',
+          }));
+          console.log(`[Repository] Loaded ${this.faculty.length} faculty from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Faculty load error:', e.message);
+      }
+
+      // 3. HOD
+      try {
+        const [hRows]: any = await pool.query('SELECT * FROM hod LIMIT 1');
+        if (Array.isArray(hRows) && hRows.length > 0) {
+          const r = hRows[0];
+          this.hod = {
+            id: r.id,
+            name: r.name,
+            designation: r.designation,
+            department: r.department,
+            email: r.email,
+            phone: r.phone || '',
+            cabin: r.cabin || '',
+            qualification: r.qualification || '',
+            officeHours: r.office_hours || '',
+            specialization: r.specialization || r.department || '',
+            message: r.bio || r.message || '',
+            accountStatus: r.account_status || 'Active',
+          };
+          console.log(`[Repository] Loaded HOD ${this.hod.name} from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] HOD load error:', e.message);
+      }
+
+      // 4. Attendance
+      try {
+        const [attRows]: any = await pool.query('SELECT * FROM attendance ORDER BY date DESC, id DESC LIMIT 500');
+        if (Array.isArray(attRows) && attRows.length > 0) {
+          this.attendance = attRows.map((r: any) => ({
+            id: r.id,
+            regNo: r.reg_no,
+            studentName: r.student_name || '',
+            subjectCode: r.subject_code,
+            subjectName: r.subject_name || '',
+            section: r.section || 'A',
+            year: r.year || 3,
+            date: r.date,
+            period: r.period || 1,
+            status: r.status,
+            markedBy: r.marked_by || 'Faculty',
+          }));
+          console.log(`[Repository] Loaded ${this.attendance.length} attendance records from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Attendance load error:', e.message);
+      }
+
+      // 5. Fees
+      try {
+        const [feeRows]: any = await pool.query('SELECT * FROM fees');
+        if (Array.isArray(feeRows) && feeRows.length > 0) {
+          this.fees = feeRows.map((r: any) => {
+            const total = Number(r.total_fee) || 0;
+            const paid = Number(r.paid_amount) || 0;
+            const due = Number(r.due_amount) || Math.max(0, total - paid);
+            return {
+              id: r.id,
+              studentRegNo: r.student_reg_no,
+              studentName: r.student_name,
+              academicYear: r.academic_year || '2025-2026',
+              semester: Number(r.semester) || 5,
+              tuitionFee: Number(r.tuition_fee) || Math.round(total * 0.7),
+              developmentFee: Number(r.development_fee) || Math.round(total * 0.2),
+              examFee: Number(r.exam_fee) || Math.round(total * 0.1),
+              totalFee: total,
+              paidAmount: paid,
+              dueAmount: due,
+              status: (r.status as 'Paid' | 'Partial' | 'Pending') || (due === 0 ? 'Paid' : paid > 0 ? 'Partial' : 'Pending'),
+              noDueApproved: Boolean(r.no_due_approved),
+              receiptNumber: r.receipt_number || '',
+              lastPaymentDate: r.last_payment_date || '',
+            };
+          });
+          console.log(`[Repository] Loaded ${this.fees.length} fee records from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Fees load error:', e.message);
+      }
+
+      // 6. Announcements
+      try {
+        const [annRows]: any = await pool.query('SELECT * FROM announcements ORDER BY date DESC, id DESC');
+        if (Array.isArray(annRows) && annRows.length > 0) {
+          this.announcements = annRows.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            author: r.author || 'Dean Academic',
+            authorRole: r.author_role || 'admin',
+            targetAudience: r.target_audience || 'All',
+            priority: r.priority || 'Normal',
+            date: r.date,
+            category: r.category || 'Academic',
+          }));
+          console.log(`[Repository] Loaded ${this.announcements.length} announcements from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Announcements load error:', e.message);
+      }
+
+      // 7. Leave Requests
+      try {
+        const [lrRows]: any = await pool.query('SELECT * FROM leave_requests ORDER BY applied_on DESC');
+        if (Array.isArray(lrRows) && lrRows.length > 0) {
+          this.leaveRequests = lrRows.map((r: any) => ({
+            id: r.id,
+            studentRegNo: r.student_reg_no,
+            studentName: r.student_name,
+            department: r.department,
+            year: r.year,
+            section: r.section,
+            startDate: r.start_date,
+            endDate: r.end_date,
+            daysCount: r.days_count,
+            reason: r.reason,
+            type: r.type,
+            status: r.status,
+            appliedOn: r.applied_on,
+            reviewedBy: r.reviewed_by,
+            reviewedOn: r.reviewed_on,
+            reviewerComments: r.reviewer_comments,
+          }));
+          console.log(`[Repository] Loaded ${this.leaveRequests.length} leave requests from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Leave requests load error:', e.message);
+      }
+
+      // 8. Departments
+      try {
+        const [dRows]: any = await pool.query('SELECT * FROM departments');
+        if (Array.isArray(dRows) && dRows.length > 0) {
+          this.departments = dRows.map((r: any) => ({
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            hodName: r.hod_name || '',
+            hodEmail: r.hod_email || '',
+            totalStudents: r.total_students || 0,
+            totalFaculty: r.total_faculty || 0,
+            establishedYear: r.established_year || 2000,
+          }));
+          console.log(`[Repository] Loaded ${this.departments.length} departments from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Departments load error:', e.message);
+      }
+
+      // 9. Subjects
+      try {
+        const [subRows]: any = await pool.query('SELECT * FROM subjects');
+        if (Array.isArray(subRows) && subRows.length > 0) {
+          this.subjects = subRows.map((r: any) => ({
+            code: r.code,
+            name: r.name,
+            facultyName: r.faculty_name || '',
+            credits: r.credits || 3,
+            semester: r.semester || 5,
+            department: r.department || '',
+          }));
+          console.log(`[Repository] Loaded ${this.subjects.length} subjects from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Subjects load error:', e.message);
+      }
+
+      // 10. Users
+      try {
+        const [uRows]: any = await pool.query('SELECT * FROM users');
+        if (Array.isArray(uRows) && uRows.length > 0) {
+          for (const u of uRows) {
+            const existingIdx = this.users.findIndex((usr) => usr.id.toLowerCase() === u.id.toLowerCase());
+            const userObj = {
+              id: u.id,
+              email: u.email,
+              passwordHash: u.password_hash,
+              role: u.role,
+              name: u.name,
+              status: u.status || 'Active',
+              createdAt: u.created_at || new Date().toISOString(),
+            };
+            if (existingIdx >= 0) {
+              this.users[existingIdx] = userObj;
+            } else {
+              this.users.push(userObj);
+            }
+          }
+          console.log(`[Repository] Loaded ${uRows.length} users from TiDB Cloud`);
+        }
+      } catch (e: any) {
+        console.warn('[Repository] Users load error:', e.message);
+      }
+
+      this.saveToDisk();
+      return true;
     } catch (err: any) {
       console.error('[Repository] Error loading from TiDB:', err.message);
     }
@@ -334,12 +525,22 @@ class InstitutionalRepository {
     }
     this.saveToDisk();
     await syncStudentToTiDb(student);
+    await syncUserToTiDb({
+      id: student.regNo,
+      email: student.email,
+      passwordHash: 'student123',
+      role: 'student',
+      name: student.name,
+      status: student.accountStatus || 'Active',
+    });
   }
 
   public async deleteStudent(regNo: string): Promise<void> {
     this.students = this.students.filter((s) => s.regNo.toUpperCase() !== regNo.toUpperCase());
+    this.users = this.users.filter((u) => u.id.toUpperCase() !== regNo.toUpperCase());
     this.saveToDisk();
     await deleteStudentFromTiDb(regNo);
+    await deleteUserFromTiDb(regNo);
   }
 
   // Mutator: Attendance
@@ -367,6 +568,22 @@ class InstitutionalRepository {
     }
     this.saveToDisk();
     await syncFacultyToTiDb(faculty);
+    await syncUserToTiDb({
+      id: faculty.id,
+      email: faculty.email,
+      passwordHash: 'faculty123',
+      role: 'faculty',
+      name: faculty.name,
+      status: faculty.accountStatus || 'Active',
+    });
+  }
+
+  public async deleteFaculty(id: string): Promise<void> {
+    this.faculty = this.faculty.filter((f) => f.id !== id);
+    this.users = this.users.filter((u) => u.id !== id);
+    this.saveToDisk();
+    await deleteFacultyFromTiDb(id);
+    await deleteUserFromTiDb(id);
   }
 
   // Mutator: HOD
@@ -374,6 +591,14 @@ class InstitutionalRepository {
     this.hod = { ...this.hod, ...hod };
     this.saveToDisk();
     await syncHodToTiDb(this.hod);
+    await syncUserToTiDb({
+      id: hod.id,
+      email: hod.email,
+      passwordHash: 'hod123',
+      role: 'hod',
+      name: hod.name,
+      status: hod.accountStatus || 'Active',
+    });
   }
 
   // Mutator: Fees
@@ -386,6 +611,12 @@ class InstitutionalRepository {
     }
     this.saveToDisk();
     await syncFeeToTiDb(fee);
+  }
+
+  public async deleteFee(id: string): Promise<void> {
+    this.fees = this.fees.filter((f) => f.id !== id);
+    this.saveToDisk();
+    await deleteFeeFromTiDb(id);
   }
 
   // Mutator: Announcement
@@ -403,6 +634,61 @@ class InstitutionalRepository {
   public async deleteAnnouncement(id: string): Promise<void> {
     this.announcements = this.announcements.filter((a) => a.id !== id);
     this.saveToDisk();
+    await deleteAnnouncementFromTiDb(id);
+  }
+
+  // Mutator: Leave Requests
+  public async saveLeave(leave: LeaveRequest): Promise<void> {
+    const idx = this.leaveRequests.findIndex((l) => l.id === leave.id);
+    if (idx >= 0) {
+      this.leaveRequests[idx] = leave;
+    } else {
+      this.leaveRequests.unshift(leave);
+    }
+    this.saveToDisk();
+    await syncLeaveToTiDb(leave);
+  }
+
+  public async deleteLeave(id: string): Promise<void> {
+    this.leaveRequests = this.leaveRequests.filter((l) => l.id !== id);
+    this.saveToDisk();
+    await deleteLeaveFromTiDb(id);
+  }
+
+  // Mutator: Departments
+  public async saveDepartment(dept: Department): Promise<void> {
+    const idx = this.departments.findIndex((d) => d.id === dept.id || d.code === dept.code);
+    if (idx >= 0) {
+      this.departments[idx] = dept;
+    } else {
+      this.departments.push(dept);
+    }
+    this.saveToDisk();
+    await syncDepartmentToTiDb(dept);
+  }
+
+  public async deleteDepartment(id: string): Promise<void> {
+    this.departments = this.departments.filter((d) => d.id !== id && d.code !== id);
+    this.saveToDisk();
+    await deleteDepartmentFromTiDb(id);
+  }
+
+  // Mutator: Subjects
+  public async saveSubject(subject: Subject): Promise<void> {
+    const idx = this.subjects.findIndex((s) => s.code === subject.code);
+    if (idx >= 0) {
+      this.subjects[idx] = subject;
+    } else {
+      this.subjects.push(subject);
+    }
+    this.saveToDisk();
+    await syncSubjectToTiDb(subject);
+  }
+
+  public async deleteSubject(code: string): Promise<void> {
+    this.subjects = this.subjects.filter((s) => s.code !== code);
+    this.saveToDisk();
+    await deleteSubjectFromTiDb(code);
   }
 
   // Add structured audit log

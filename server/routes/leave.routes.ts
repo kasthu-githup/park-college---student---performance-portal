@@ -30,7 +30,7 @@ router.get('/', optionalAuth, (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/leave-requests - Submit leave request with date validation and duplicate check
-router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const data = req.body as Partial<LeaveRequest>;
 
   if (!data.startDate || !data.endDate || !data.reason) {
@@ -76,7 +76,7 @@ router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     appliedOn: new Date().toISOString().split('T')[0],
   };
 
-  repo.leaveRequests.unshift(newRequest);
+  await repo.saveLeave(newRequest);
 
   // Push notification to mentor / faculty
   const notif: NotificationItem = {
@@ -103,7 +103,7 @@ router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
 });
 
 // PUT /api/leave-requests/:id/review - Review leave request (Approve/Reject)
-router.put('/:id/review', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id/review', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { status, reviewerName, comments } = req.body;
 
@@ -120,6 +120,7 @@ router.put('/:id/review', requireAuth, (req: AuthenticatedRequest, res: Response
   request.reviewedBy = reviewerName || req.user?.name || 'Faculty Mentor';
   request.reviewedOn = new Date().toISOString().split('T')[0];
   request.reviewerComments = comments || '';
+  await repo.saveLeave(request);
 
   // Notify student
   const studentNotif: NotificationItem = {

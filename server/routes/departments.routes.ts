@@ -26,7 +26,7 @@ router.get('/', optionalAuth, (_req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/departments - Create department (Admin only)
-router.post('/', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { code, name, hodName, hodEmail, establishedYear } = req.body;
 
   if (!code || !name) {
@@ -49,7 +49,7 @@ router.post('/', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, 
     establishedYear: Number(establishedYear) || 2026,
   };
 
-  repo.departments.push(newDept);
+  await repo.saveDepartment(newDept);
   repo.logAudit(
     'DEPARTMENT_CREATED',
     req.user!.email,
@@ -62,7 +62,7 @@ router.post('/', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, 
 });
 
 // PUT /api/departments/:id - Update department
-router.put('/:id', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const dept = repo.departments.find((d) => d.id === id);
 
@@ -71,6 +71,7 @@ router.put('/:id', requireAuth, requireRole('admin'), (req: AuthenticatedRequest
   }
 
   Object.assign(dept, req.body);
+  await repo.saveDepartment(dept);
   repo.logAudit(
     'DEPARTMENT_UPDATED',
     req.user!.email,
@@ -83,7 +84,7 @@ router.put('/:id', requireAuth, requireRole('admin'), (req: AuthenticatedRequest
 });
 
 // DELETE /api/departments/:id - Remove department
-router.delete('/:id', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const idx = repo.departments.findIndex((d) => d.id === id);
 
@@ -91,12 +92,13 @@ router.delete('/:id', requireAuth, requireRole('admin'), (req: AuthenticatedRequ
     return res.status(404).json({ success: false, message: 'Department not found' });
   }
 
-  const removed = repo.departments.splice(idx, 1)[0];
+  const removed = repo.departments.find((d) => d.id === id);
+  await repo.deleteDepartment(id);
   repo.logAudit(
     'DEPARTMENT_DELETED',
     req.user!.email,
     'admin',
-    `Removed department ${removed.name} (${removed.code})`,
+    `Removed department ${removed?.name || id} (${removed?.code || id})`,
     req.ip
   );
 

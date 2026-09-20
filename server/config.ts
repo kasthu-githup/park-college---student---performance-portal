@@ -38,8 +38,8 @@ export const config = {
   tidb: {
     host: dynamicDbConfig?.tidb?.host || process.env.TIDB_HOST || 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
     port: Number(dynamicDbConfig?.tidb?.port || process.env.TIDB_PORT || 4000),
-    user: dynamicDbConfig?.tidb?.user || process.env.TIDB_USER || '4DCBaqMJVo1Yjy9.root',
-    password: dynamicDbConfig?.tidb?.password || process.env.TIDB_PASSWORD || '',
+    user: dynamicDbConfig?.tidb?.user || process.env.TIDB_USER || '2zWbwkdC8He9zu1.root',
+    password: dynamicDbConfig?.tidb?.password || process.env.TIDB_PASSWORD || 'QDlj2w20i9bI6pPt',
     database: dynamicDbConfig?.tidb?.database || process.env.TIDB_DATABASE || 'college_nodue',
     enableSsl: (dynamicDbConfig?.tidb?.enableSsl !== false) && (process.env.TIDB_ENABLE_SSL !== 'false'),
   },

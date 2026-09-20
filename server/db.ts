@@ -47,17 +47,16 @@ let mysqlPool: MySqlPool | null = null;
 
 // Determine active database configuration
 export function getDbMode(): 'postgres' | 'mysql' | 'memory' {
+  if (config.tidb.password && config.tidb.password.trim() !== '') {
+    return 'mysql';
+  }
   const hasPg = !!(
     config.pg.connectionString ||
-    process.env.DATABASE_URL ||
     (config.pg.password && config.pg.password.trim() !== '') ||
-    (config.pg.host && config.pg.host !== 'localhost')
+    (config.pg.host && config.pg.host !== 'localhost' && config.pg.host !== '')
   );
   if (hasPg) {
     return 'postgres';
-  }
-  if (config.tidb.password && config.tidb.password.trim() !== '') {
-    return 'mysql';
   }
   return 'memory';
 }
@@ -841,24 +840,27 @@ export async function syncAttendanceToTiDb(records: AttendanceRecord[]): Promise
   const pool = getMySqlPool();
   if (!pool || records.length === 0) return;
   try {
-    for (const r of records) {
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      const values = chunk.map((r) => [
+        r.id,
+        r.date,
+        r.regNo,
+        r.studentName || '',
+        r.subjectCode,
+        r.subjectName || '',
+        r.section,
+        r.year,
+        r.status,
+        r.markedBy,
+        r.period || 1,
+      ]);
       await pool.query(
         `REPLACE INTO attendance_records (
           id, date, reg_no, student_name, subject_code, subject_name, section, year, status, marked_by, period
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          r.id,
-          r.date,
-          r.regNo,
-          r.studentName || '',
-          r.subjectCode,
-          r.subjectName || '',
-          r.section,
-          r.year,
-          r.status,
-          r.markedBy,
-          r.period || 1,
-        ]
+        ) VALUES ?`,
+        [values]
       );
     }
   } catch (err: any) {
@@ -985,3 +987,166 @@ export async function syncAnnouncementToTiDb(a: Announcement): Promise<void> {
     console.error('[TiDB] syncAnnouncementToTiDb error:', err.message);
   }
 }
+
+export async function deleteFacultyFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM faculty WHERE id = ?', [id]);
+    await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteFacultyFromTiDb error:', err.message);
+  }
+}
+
+export async function deleteFeeFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM fees WHERE id = ?', [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteFeeFromTiDb error:', err.message);
+  }
+}
+
+export async function deleteAnnouncementFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM announcements WHERE id = ?', [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteAnnouncementFromTiDb error:', err.message);
+  }
+}
+
+export async function deleteUserFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteUserFromTiDb error:', err.message);
+  }
+}
+
+export async function syncLeaveToTiDb(l: any): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `REPLACE INTO leave_requests (
+        id, student_reg_no, student_name, department, year, section, start_date, end_date,
+        days_count, reason, type, status, applied_on, reviewed_by, reviewed_on, reviewer_comments
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        l.id,
+        l.studentRegNo,
+        l.studentName || '',
+        l.department || '',
+        l.year || 3,
+        l.section || 'A',
+        l.startDate,
+        l.endDate,
+        l.daysCount || 1,
+        l.reason,
+        l.type || 'Personal',
+        l.status || 'Pending',
+        l.appliedOn || new Date().toISOString().split('T')[0],
+        l.reviewedBy || null,
+        l.reviewedOn || null,
+        l.reviewerComments || null,
+      ]
+    );
+  } catch (err: any) {
+    console.error('[TiDB] syncLeaveToTiDb error:', err.message);
+  }
+}
+
+export async function deleteLeaveFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM leave_requests WHERE id = ?', [id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteLeaveFromTiDb error:', err.message);
+  }
+}
+
+export async function syncDepartmentToTiDb(d: any): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `REPLACE INTO departments (id, code, name, hod_name, hod_email, total_students, total_faculty, established_year)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        d.id,
+        d.code,
+        d.name,
+        d.hodName || '',
+        d.hodEmail || '',
+        d.totalStudents || 0,
+        d.totalFaculty || 0,
+        d.establishedYear || 2000,
+      ]
+    );
+  } catch (err: any) {
+    console.error('[TiDB] syncDepartmentToTiDb error:', err.message);
+  }
+}
+
+export async function deleteDepartmentFromTiDb(id: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM departments WHERE id = ? OR code = ?', [id, id]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteDepartmentFromTiDb error:', err.message);
+  }
+}
+
+export async function syncSubjectToTiDb(s: any): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `REPLACE INTO subjects (code, name, faculty_name, credits, semester, department)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        s.code,
+        s.name,
+        s.facultyName || '',
+        s.credits || 3,
+        s.semester || 5,
+        s.department || '',
+      ]
+    );
+  } catch (err: any) {
+    console.error('[TiDB] syncSubjectToTiDb error:', err.message);
+  }
+}
+
+export async function deleteSubjectFromTiDb(code: string): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM subjects WHERE code = ?', [code]);
+  } catch (err: any) {
+    console.error('[TiDB] deleteSubjectFromTiDb error:', err.message);
+  }
+}
+
+export async function syncUserToTiDb(u: any): Promise<void> {
+  const pool = getMySqlPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `REPLACE INTO users (id, email, password_hash, role, name, status)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [u.id, u.email, u.passwordHash || u.password, u.role, u.name, u.status || 'Active']
+    );
+  } catch (err: any) {
+    console.error('[TiDB] syncUserToTiDb error:', err.message);
+  }
+}
+

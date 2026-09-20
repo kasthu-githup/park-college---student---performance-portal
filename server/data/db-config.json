@@ -1,0 +1,10 @@
+{
+  "tidb": {
+    "host": "gateway01.ap-southeast-1.prod.aws.tidbcloud.com",
+    "port": 4000,
+    "user": "2zWbwkdC8He9zu1.root",
+    "password": "QDlj2w20i9bI6pPt",
+    "database": "college_nodue",
+    "enableSsl": true
+  }
+}

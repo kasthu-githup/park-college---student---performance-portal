@@ -518,6 +518,26 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               setFees(list);
             }
           }
+
+          // 8. Synchronize Departments
+          const deptRes = await fetch('/api/departments');
+          if (deptRes.ok) {
+            const deptData = await deptRes.json();
+            const list = Array.isArray(deptData) ? deptData : deptData?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              setDepartments(list);
+            }
+          }
+
+          // 9. Synchronize Subjects
+          const subjRes = await fetch('/api/subjects');
+          if (subjRes.ok) {
+            const subjData = await subjRes.json();
+            const list = Array.isArray(subjData) ? subjData : subjData?.data;
+            if (Array.isArray(list) && list.length > 0) {
+              setSubjects(list);
+            }
+          }
         } catch (e) {
           console.error('Error fetching records from backend API:', e);
         }
@@ -1681,6 +1701,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addDepartment = (dept: Department) => {
     setDepartments((prev) => [...prev, dept]);
     addAuditLogEntry('DEPARTMENT_ADDED', `Created department ${dept.name} (${dept.code})`);
+    fetch('/api/departments', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify(dept),
+    }).catch((err) => console.warn('Add dept API sync error:', err));
   };
 
   const updateDepartment = (id: string, data: Partial<Department>) => {
@@ -1688,17 +1713,31 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       prev.map((d) => (d.id === id ? { ...d, ...data } : d))
     );
     addAuditLogEntry('DEPARTMENT_UPDATED', `Updated department ID ${id}`);
+    fetch(`/api/departments/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify(data),
+    }).catch((err) => console.warn('Update dept API sync error:', err));
   };
 
   const deleteDepartment = (id: string) => {
     setDepartments((prev) => prev.filter((d) => d.id !== id));
     addAuditLogEntry('DEPARTMENT_DELETED', `Deleted department ID ${id}`);
+    fetch(`/api/departments/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getApiHeaders(),
+    }).catch((err) => console.warn('Delete dept API sync error:', err));
   };
 
   // Subject Management
   const addSubject = (subj: Subject) => {
     setSubjects((prev) => [...prev, subj]);
     addAuditLogEntry('SUBJECT_ADDED', `Created subject ${subj.code} - ${subj.name}`);
+    fetch('/api/subjects', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify(subj),
+    }).catch((err) => console.warn('Add subject API sync error:', err));
   };
 
   const updateSubject = (code: string, data: Partial<Subject>) => {
@@ -1706,11 +1745,20 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       prev.map((s) => (s.code === code ? { ...s, ...data } : s))
     );
     addAuditLogEntry('SUBJECT_UPDATED', `Updated subject ${code}`);
+    fetch(`/api/subjects/${encodeURIComponent(code)}`, {
+      method: 'PUT',
+      headers: getApiHeaders(),
+      body: JSON.stringify(data),
+    }).catch((err) => console.warn('Update subject API sync error:', err));
   };
 
   const deleteSubject = (code: string) => {
     setSubjects((prev) => prev.filter((s) => s.code !== code));
     addAuditLogEntry('SUBJECT_DELETED', `Deleted subject ${code}`);
+    fetch(`/api/subjects/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+      headers: getApiHeaders(),
+    }).catch((err) => console.warn('Delete subject API sync error:', err));
   };
 
   // Fee Payment Update
@@ -1872,6 +1920,12 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       'HOD_ALLOCATED',
       `Admin allocated ${hodName} as Head of Department for ${deptName} (${deptCode}) with allocated credentials.`
     );
+
+    fetch('/api/hod', {
+      method: 'POST',
+      headers: getApiHeaders(),
+      body: JSON.stringify(newOrUpdatedHod),
+    }).catch((err) => console.warn('HOD allocation API sync error:', err));
   };
 
   // Admin / User Management: Create any user account
@@ -1931,6 +1985,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
       setStudents((prev) => [newStu, ...prev]);
       addAuditLogEntry('USER_CREATED', `Created student account ${newStu.name} (${newStu.regNo})`);
+      fetch('/api/students', {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify(newStu),
+      }).catch((err) => console.warn('User create student API sync:', err));
       return { success: true, message: `Student account created for ${newStu.name}.` };
     }
 
@@ -1954,6 +2013,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
       setFacultyList((prev) => [newFac, ...prev]);
       addAuditLogEntry('USER_CREATED', `Created staff account ${newFac.name} (${newFac.id})`);
+      fetch('/api/faculty', {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify(newFac),
+      }).catch((err) => console.warn('User create faculty API sync:', err));
       return { success: true, message: `Staff account created for ${newFac.name}.` };
     }
 
@@ -2012,6 +2076,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       addAuditLogEntry('USER_CREATED', `Configured HOD account ${newUser.name} for ${deptName}`);
+      fetch('/api/hod', {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify(newHodObj),
+      }).catch((err) => console.warn('User create HOD API sync:', err));
       return { success: true, message: `HOD account created for ${newUser.name} (${targetDept ? targetDept.code : 'HOD'}).` };
     }
 
@@ -2067,6 +2136,27 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else if (role === 'admin') {
       setAdmin((prev) => ({ ...prev, ...data }));
     }
+
+    if (role === 'student') {
+      fetch(`/api/students/${encodeURIComponent(userId)}`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify(data),
+      }).catch((err) => console.warn('Update student credentials API sync:', err));
+    } else if (role === 'faculty') {
+      fetch(`/api/faculty/${encodeURIComponent(userId)}`, {
+        method: 'PUT',
+        headers: getApiHeaders(),
+        body: JSON.stringify(data),
+      }).catch((err) => console.warn('Update faculty credentials API sync:', err));
+    } else if (role === 'hod') {
+      fetch('/api/hod', {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({ id: userId, ...data }),
+      }).catch((err) => console.warn('Update HOD credentials API sync:', err));
+    }
+
     addAuditLogEntry('CREDENTIALS_UPDATED', `Updated credentials and password for user ID ${userId} (${role})`);
   };
 

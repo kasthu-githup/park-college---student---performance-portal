@@ -11,7 +11,7 @@ router.get('/', optionalAuth, (_req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/subjects - Create new subject (Admin & HOD)
-router.post('/', requireAuth, requireRole('admin', 'hod'), (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireAuth, requireRole('admin', 'hod'), async (req: AuthenticatedRequest, res: Response) => {
   const { code, name, facultyName, credits, semester, department } = req.body;
 
   if (!code || !name) {
@@ -34,7 +34,7 @@ router.post('/', requireAuth, requireRole('admin', 'hod'), (req: AuthenticatedRe
     department: department || 'Computer Science and Engineering',
   };
 
-  repo.subjects.push(newSubj);
+  await repo.saveSubject(newSubj);
   repo.logAudit(
     'SUBJECT_CREATED',
     req.user!.email,
@@ -47,7 +47,7 @@ router.post('/', requireAuth, requireRole('admin', 'hod'), (req: AuthenticatedRe
 });
 
 // PUT /api/subjects/:code - Update subject
-router.put('/:code', requireAuth, requireRole('admin', 'hod'), (req: AuthenticatedRequest, res: Response) => {
+router.put('/:code', requireAuth, requireRole('admin', 'hod'), async (req: AuthenticatedRequest, res: Response) => {
   const { code } = req.params;
   const subj = repo.subjects.find((s) => s.code.toUpperCase() === code.toUpperCase());
 
@@ -56,6 +56,7 @@ router.put('/:code', requireAuth, requireRole('admin', 'hod'), (req: Authenticat
   }
 
   Object.assign(subj, req.body);
+  await repo.saveSubject(subj);
   repo.logAudit(
     'SUBJECT_UPDATED',
     req.user!.email,
@@ -68,20 +69,20 @@ router.put('/:code', requireAuth, requireRole('admin', 'hod'), (req: Authenticat
 });
 
 // DELETE /api/subjects/:code - Remove subject
-router.delete('/:code', requireAuth, requireRole('admin'), (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:code', requireAuth, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const { code } = req.params;
-  const idx = repo.subjects.findIndex((s) => s.code.toUpperCase() === code.toUpperCase());
+  const subj = repo.subjects.find((s) => s.code.toUpperCase() === code.toUpperCase());
 
-  if (idx === -1) {
+  if (!subj) {
     return res.status(404).json({ success: false, message: 'Subject not found' });
   }
 
-  const removed = repo.subjects.splice(idx, 1)[0];
+  await repo.deleteSubject(code);
   repo.logAudit(
     'SUBJECT_DELETED',
     req.user!.email,
     'admin',
-    `Removed subject ${removed.code} (${removed.name})`,
+    `Removed subject ${subj.code} (${subj.name})`,
     req.ip
   );
 

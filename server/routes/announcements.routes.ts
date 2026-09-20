@@ -58,16 +58,15 @@ router.post('/', requireAuth, requireRole('admin', 'hod', 'faculty'), async (req
 });
 
 // DELETE /api/announcements/:id - Remove announcement
-router.delete('/:id', requireAuth, requireRole('admin', 'hod', 'faculty'), (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requireAuth, requireRole('admin', 'hod', 'faculty'), async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
-  const idx = repo.announcements.findIndex((a) => a.id === id);
+  const removed = repo.announcements.find((a) => a.id === id);
 
-  if (idx === -1) {
+  if (!removed) {
     return res.status(404).json({ success: false, message: 'Announcement not found' });
   }
 
-  const removed = repo.announcements.splice(idx, 1)[0];
-  repo.saveToDisk();
+  await repo.deleteAnnouncement(id);
   repo.logAudit(
     'ANNOUNCEMENT_DELETED',
     req.user!.email,
