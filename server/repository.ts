@@ -77,15 +77,6 @@ class InstitutionalRepository {
       lastLogin: new Date().toISOString(),
     },
     {
-      id: 'admin',
-      email: 'admin@college.edu',
-      passwordHash: '$2a$10$w099B0LgqM81b1.6k2vRre9R85YxZ2eN.81M7r2kPq9cM9Gz7R8e6',
-      role: 'admin',
-      name: 'Kasthuri',
-      status: 'Active',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
       id: 'FAC001',
       email: 'r.sharma@college.edu',
       passwordHash: 'faculty123',

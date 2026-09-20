@@ -2213,7 +2213,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   };
 
-  const resetAllData = () => {
+  const resetAllData = async () => {
     // Clear all localStorage keys belonging to this portal
     try {
       Object.keys(localStorage).forEach((key) => {
@@ -2225,20 +2225,33 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Error clearing localStorage', e);
     }
 
-    setStudents(INITIAL_STUDENTS);
-    setFacultyList(INITIAL_FACULTY);
-    setHod(INITIAL_HOD);
-    setHodList(INITIAL_HOD_LIST);
-    setAdmin(INITIAL_ADMIN);
-    setDepartments(INITIAL_DEPARTMENTS);
-    setSubjects(SUBJECT_CATALOG);
-    setAttendanceRecords(generateInitialAttendanceLogs());
-    setLeaveRequests(INITIAL_LEAVE_REQUESTS);
-    setAnnouncements(INITIAL_ANNOUNCEMENTS);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setFees(INITIAL_FEES);
-    setAuditLogs(INITIAL_AUDIT_LOGS);
     setCurrentUser(null);
+
+    // Refresh state directly from live TiDB Cloud backend
+    try {
+      const [stuRes, facRes, hodRes, attRes, annRes, leaveRes, feesRes, deptRes, subjRes] = await Promise.all([
+        fetch('/api/students'),
+        fetch('/api/faculty'),
+        fetch('/api/hod'),
+        fetch('/api/attendance'),
+        fetch('/api/announcements'),
+        fetch('/api/leave-requests'),
+        fetch('/api/fees'),
+        fetch('/api/departments'),
+        fetch('/api/subjects'),
+      ]);
+      if (stuRes.ok) { const d = await stuRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setStudents(list); }
+      if (facRes.ok) { const d = await facRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setFacultyList(list); }
+      if (hodRes.ok) { const d = await hodRes.json(); const obj = d?.data || d; if (obj?.name) setHod(obj); }
+      if (attRes.ok) { const d = await attRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setAttendanceRecords(list); }
+      if (annRes.ok) { const d = await annRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setAnnouncements(list); }
+      if (leaveRes.ok) { const d = await leaveRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setLeaveRequests(list); }
+      if (feesRes.ok) { const d = await feesRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setFees(list); }
+      if (deptRes.ok) { const d = await deptRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setDepartments(list); }
+      if (subjRes.ok) { const d = await subjRes.json(); const list = Array.isArray(d) ? d : d?.data; if (Array.isArray(list) && list.length > 0) setSubjects(list); }
+    } catch (e) {
+      console.warn('Error refreshing state from TiDB Cloud:', e);
+    }
   };
 
   return (
